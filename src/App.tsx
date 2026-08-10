@@ -48,6 +48,19 @@ function StatusMark({ status }: { status: PreparationStatus }) {
   return <span className="status-mark">Niet gecheckt</span>
 }
 
+function firstLetter(student: Student) {
+  return student.name.trim().charAt(0).toLocaleUpperCase('nl-NL')
+}
+
+function alphabetized(students: Student[]) {
+  return [...students].sort((a, b) => a.name.localeCompare(b.name, 'nl-NL', { sensitivity: 'base' }))
+}
+
+function AlphabetNav({ students, prefix }: { students: Student[]; prefix: 'attendance' | 'preparation' }) {
+  const letters = [...new Set(alphabetized(students).map(firstLetter))]
+  return <nav className="alphabet-nav" aria-label="Alfabetische navigatie">{letters.map((letter) => <a key={letter} href={`#${prefix}-${letter}`} aria-label={letter}>{letter}</a>)}</nav>
+}
+
 function StudentCard({ student, state, selected, highlighted, onSelect, onNotes }: {
   student: Student
   state: AppState
@@ -57,7 +70,9 @@ function StudentCard({ student, state, selected, highlighted, onSelect, onNotes 
   onNotes: () => void
 }) {
   const signals = getTopWorkSignals(state, student.id)
-  const noteCount = state.notes.filter((note) => note.studentId === student.id).length
+  const studentNotes = state.notes.filter((note) => note.studentId === student.id)
+  const noteCount = studentNotes.length
+  const hasImportantNote = studentNotes.some((note) => note.important)
   return (
     <article className={`student-card ${selected ? 'selected' : ''} ${highlighted ? 'highlighted' : ''} ${!student.present ? 'absent' : ''}`}>
       <button className="student-main" type="button" onClick={onSelect} aria-label={`${student.name} selecteren`}>
@@ -71,7 +86,7 @@ function StudentCard({ student, state, selected, highlighted, onSelect, onNotes 
         </span>
         <span className={`score ${scoreTone(student.score)}`} data-testid={`${student.id}-score`}>{student.score > 0 ? '+' : ''}{student.score}</span>
       </button>
-      <button type="button" className="notes-link" onClick={onNotes} aria-label={`Notities van ${student.name}`}>Notities {noteCount ? `(${noteCount})` : ''}</button>
+      <button type="button" className={`notes-link ${hasImportantNote ? 'important' : ''}`} onClick={onNotes} aria-label={`Notities van ${student.name}`}>{hasImportantNote && <span aria-hidden="true">★ </span>}Notities {noteCount ? `(${noteCount})` : ''}</button>
     </article>
   )
 }
@@ -81,27 +96,33 @@ function AttendanceGrid({ state, onChange, onFinish }: {
   onChange: (studentId: string, status: 'present' | 'absent' | 'late') => void
   onFinish: () => void
 }) {
+  const students = alphabetized(state.students)
   return (
     <>
       <section className="section-heading compact-heading">
         <div><p className="eyebrow">Start van de les</p><h2>Aanwezigheid</h2></div>
         <button type="button" className="random" onClick={onFinish}>Aanwezigheid afronden</button>
       </section>
+      <AlphabetNav students={students} prefix="attendance" />
       <section className="attendance-grid">
-        {state.students.map((student) => (
-          <article className={`attendance-card ${!student.present ? 'absent' : ''}`} key={student.id}>
-            <span className="avatar">{student.initials}</span>
-            <strong>{student.name}</strong>
-            {student.present ? (
-              <button type="button" className="attendance-toggle" onClick={() => onChange(student.id, 'absent')} aria-label={`${student.name} afwezig melden`}>Aanwezig</button>
-            ) : (
-              <div className="attendance-options">
-                <button type="button" onClick={() => onChange(student.id, 'present')} aria-label={`${student.name} aanwezig melden`}>Aanwezig</button>
-                <button type="button" onClick={() => onChange(student.id, 'late')} aria-label={`${student.name} te laat melden`}>Te laat</button>
-              </div>
-            )}
-          </article>
-        ))}
+        {students.map((student, index) => {
+          const letter = firstLetter(student)
+          const startsLetter = index === 0 || firstLetter(students[index - 1]) !== letter
+          return (
+            <article id={startsLetter ? `attendance-${letter}` : undefined} className={`attendance-card ${!student.present ? 'absent' : ''}`} key={student.id}>
+              <span className="avatar">{student.initials}</span>
+              <strong>{student.name}</strong>
+              {student.present ? (
+                <button type="button" className="attendance-toggle" onClick={() => onChange(student.id, 'absent')} aria-label={`${student.name} afwezig melden`}>Aanwezig</button>
+              ) : (
+                <div className="attendance-options">
+                  <button type="button" onClick={() => onChange(student.id, 'present')} aria-label={`${student.name} aanwezig melden`}>Aanwezig</button>
+                  <button type="button" onClick={() => onChange(student.id, 'late')} aria-label={`${student.name} te laat melden`}>Te laat</button>
+                </div>
+              )}
+            </article>
+          )
+        })}
       </section>
     </>
   )
@@ -111,27 +132,33 @@ function PreparationGrid({ state, onChange }: {
   state: AppState
   onChange: (studentId: string, field: 'homework' | 'materials', status: PreparationStatus) => void
 }) {
+  const students = alphabetized(state.students)
   return (
     <>
       <section className="section-heading compact-heading">
         <div><p className="eyebrow">Snelle controle</p><h2>Huiswerk & spullen</h2></div>
         <p>Tik alleen afwijkingen of bevestig wat je hebt gecontroleerd.</p>
       </section>
+      <AlphabetNav students={students} prefix="preparation" />
       <section className="preparation-grid">
-        {state.students.map((student) => (
-          <article className="preparation-card" key={student.id} data-testid={`${student.id}-preparation`}>
-            <div className="prep-student"><span className="avatar">{student.initials}</span><strong>{student.name}</strong></div>
-            <div className="prep-row"><span>Huiswerk</span><StatusMark status={student.homework} /><div>
-              <button type="button" onClick={() => onChange(student.id, 'homework', 'ok')} aria-label={`${student.name} huiswerk in orde`}>✓</button>
-              <button type="button" onClick={() => onChange(student.id, 'homework', 'missing')} aria-label={`${student.name} huiswerk niet in orde`}>×</button>
-            </div></div>
-            <div className="prep-row"><span>Spullen</span><StatusMark status={student.materials} /><div>
-              <button type="button" onClick={() => onChange(student.id, 'materials', 'ok')} aria-label={`${student.name} spullen in orde`}>✓</button>
-              <button type="button" onClick={() => onChange(student.id, 'materials', 'missing')} aria-label={`${student.name} spullen niet in orde`}>×</button>
-            </div></div>
-            <span className="sr-only">{student.homework === 'missing' ? 'Huiswerk mist' : student.homework === 'ok' ? 'Huiswerk oké' : ''} {student.materials === 'missing' ? 'Spullen missen' : student.materials === 'ok' ? 'Spullen oké' : ''}</span>
-          </article>
-        ))}
+        {students.map((student, index) => {
+          const letter = firstLetter(student)
+          const startsLetter = index === 0 || firstLetter(students[index - 1]) !== letter
+          return (
+            <article id={startsLetter ? `preparation-${letter}` : undefined} className="preparation-card" key={student.id} data-testid={`${student.id}-preparation`}>
+              <div className="prep-student"><span className="avatar">{student.initials}</span><strong>{student.name}</strong></div>
+              <div className="prep-row"><span>Huiswerk</span><StatusMark status={student.homework} /><div>
+                <button type="button" onClick={() => onChange(student.id, 'homework', 'ok')} aria-label={`${student.name} huiswerk in orde`}>✓</button>
+                <button type="button" onClick={() => onChange(student.id, 'homework', 'missing')} aria-label={`${student.name} huiswerk niet in orde`}>×</button>
+              </div></div>
+              <div className="prep-row"><span>Spullen</span><StatusMark status={student.materials} /><div>
+                <button type="button" onClick={() => onChange(student.id, 'materials', 'ok')} aria-label={`${student.name} spullen in orde`}>✓</button>
+                <button type="button" onClick={() => onChange(student.id, 'materials', 'missing')} aria-label={`${student.name} spullen niet in orde`}>×</button>
+              </div></div>
+              <span className="sr-only">{student.homework === 'missing' ? 'Huiswerk mist' : student.homework === 'ok' ? 'Huiswerk oké' : ''} {student.materials === 'missing' ? 'Spullen missen' : student.materials === 'ok' ? 'Spullen oké' : ''}</span>
+            </article>
+          )
+        })}
       </section>
     </>
   )
@@ -142,8 +169,10 @@ function App() {
   const [view, setView] = useState<View>('attendance')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [historyId, setHistoryId] = useState<string | null>(null)
+  const [showImportantNotes, setShowImportantNotes] = useState(false)
   const [randomId, setRandomId] = useState<string | null>(null)
   const [noteText, setNoteText] = useState('')
+  const [noteImportant, setNoteImportant] = useState(false)
   const [isOnline, setIsOnline] = useState(navigator.onLine)
 
   useEffect(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(state)), [state])
@@ -161,6 +190,13 @@ function App() {
   const latestStudent = state.students.find((student) => student.id === latest?.studentId)
   const latestAction = ACTIONS.find((action) => action.id === latest?.actionId)
   const groups = useMemo(() => (['answer', 'work', 'behaviour'] as ActionGroup[]).map((group) => ({ group, actions: ACTIONS.filter((action) => action.group === group) })), [])
+  const importantNotes = state.notes.filter((note) => note.important).slice().reverse()
+
+  const openObservation = (studentId: string) => {
+    setNoteText('')
+    setNoteImportant(false)
+    setSelectedId(studentId)
+  }
 
   const record = (actionId: Parameters<typeof applyObservation>[2]) => {
     if (!selectedId) return
@@ -170,12 +206,14 @@ function App() {
   const randomize = () => {
     const id = chooseRandomStudent(state)
     setRandomId(id)
-    setSelectedId(id)
+    if (id) openObservation(id)
+    else setSelectedId(null)
   }
   const saveNote = () => {
     if (!selectedId || !noteText.trim()) return
-    setState((current) => addLessonNote(current, selectedId, noteText))
+    setState((current) => addLessonNote(current, selectedId, noteText, undefined, noteImportant))
     setNoteText('')
+    setNoteImportant(false)
   }
   const openHistory = (studentId: string) => {
     setSelectedId(null)
@@ -188,6 +226,7 @@ function App() {
         <div><p className="eyebrow">Live les</p><h1>{state.className}</h1></div>
         <div className="top-actions">
           <div className={`sync-pill ${isOnline ? 'online' : 'offline'}`} data-testid="pending-sync"><span className="status-dot" />{isOnline ? `${state.pendingSync} wachtend` : `Offline · ${state.pendingSync} wachtend`}</div>
+          <button type="button" className="secondary important-overview-button" onClick={() => setShowImportantNotes(true)}>★ Belangrijke notities{importantNotes.length ? ` (${importantNotes.length})` : ''}</button>
           <button type="button" className="secondary" onClick={() => setState((current) => undoLastObservation(current))} disabled={!latest}>↶ Ongedaan maken</button>
           <button type="button" className="random" onClick={randomize}>✦ Kies leerling</button>
         </div>
@@ -212,14 +251,14 @@ function App() {
         {view === 'live' && <>
           <section className="section-heading"><div><p className="eyebrow">Klasoverzicht</p><h2>Kies eerst een leerling</h2></div><p>Beurten, vraagpunten en opvallende werkhouding blijven in beeld.</p></section>
           <section className="student-grid">
-            {state.students.map((student) => <StudentCard key={student.id} student={student} state={state} selected={student.id === selectedId} highlighted={student.id === randomId} onSelect={() => { setSelectedId(student.id); setRandomId(null) }} onNotes={() => openHistory(student.id)} />)}
+            {state.students.filter((student) => student.present).map((student) => <StudentCard key={student.id} student={student} state={state} selected={student.id === selectedId} highlighted={student.id === randomId} onSelect={() => { openObservation(student.id); setRandomId(null) }} onNotes={() => openHistory(student.id)} />)}
           </section>
         </>}
       </main>
 
       {selected && (
         <div className="action-backdrop" onClick={() => setSelectedId(null)}>
-          <aside className="action-panel" onClick={(event) => event.stopPropagation()} aria-label={`Observatie voor ${selected.name}`}>
+          <aside className="action-panel" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()} aria-label={`Observatie voor ${selected.name}`}>
             <div className="panel-handle" />
             <div className="panel-heading">
               <div className="selected-avatar">{selected.initials}</div>
@@ -234,7 +273,12 @@ function App() {
                   const count = state.observations.filter((observation) => observation.studentId === selected.id && observation.actionId === action.id).length
                   return <button key={action.id} type="button" className={`action-button points-${Math.sign(action.points)}`} onClick={() => record(action.id)} aria-label={action.label}><span>{action.shortLabel}{count > 0 && <small>{count}×</small>}</span><b>{action.points > 0 ? '+' : ''}{action.points}</b></button>
                 })}</div></section>)}</div>
-                <section className="note-composer"><label htmlFor="lesson-note">Lesnotitie</label><textarea id="lesson-note" aria-label="Lesnotitie" value={noteText} onChange={(event) => setNoteText(event.target.value)} placeholder="Korte feitelijke notitie voor deze les…" /><div><button type="button" className="secondary" aria-label="Notitiegeschiedenis openen" onClick={() => openHistory(selected.id)}>Notities van {selected.name}</button><button type="button" className="random" onClick={saveNote} disabled={!noteText.trim()}>Notitie bewaren</button></div></section>
+                <section className="note-composer">
+                  <label htmlFor="lesson-note">Lesnotitie</label>
+                  <textarea id="lesson-note" aria-label="Lesnotitie" value={noteText} onChange={(event) => setNoteText(event.target.value)} placeholder="Korte feitelijke notitie voor deze les…" />
+                  <label className={`important-toggle ${noteImportant ? 'checked' : ''}`}><input type="checkbox" aria-label="Belangrijke notitie" checked={noteImportant} onChange={(event) => setNoteImportant(event.target.checked)} /> <span>★ Belangrijke notitie</span><small>Markeer geel in het live-overzicht</small></label>
+                  <div><button type="button" className="secondary" aria-label="Notitiegeschiedenis openen" onClick={() => openHistory(selected.id)}>Notities van {selected.name}</button><button type="button" className="random" onClick={saveNote} disabled={!noteText.trim()}>Notitie bewaren</button></div>
+                </section>
               </>
             )}
           </aside>
@@ -243,9 +287,21 @@ function App() {
 
       {historyStudent && (
         <div className="action-backdrop" onClick={() => setHistoryId(null)}>
-          <aside className="history-panel" onClick={(event) => event.stopPropagation()} aria-label={`Notitiegeschiedenis van ${historyStudent.name}`}>
+          <aside className="history-panel" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()} aria-label={`Notitiegeschiedenis van ${historyStudent.name}`}>
             <div className="panel-heading"><div className="selected-avatar">{historyStudent.initials}</div><div><p className="eyebrow">Notitiegeschiedenis</p><h2>{historyStudent.name}</h2></div><button type="button" className="close" onClick={() => setHistoryId(null)} aria-label="Sluiten">×</button></div>
-            <div className="note-history">{state.notes.filter((note) => note.studentId === historyStudent.id).length ? state.notes.filter((note) => note.studentId === historyStudent.id).slice().reverse().map((note) => <article key={note.id}><time>{new Date(note.createdAt).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' })}</time><p>{note.text}</p></article>) : <p className="empty-state">Nog geen notities.</p>}</div>
+            <div className="note-history">{state.notes.filter((note) => note.studentId === historyStudent.id).length ? state.notes.filter((note) => note.studentId === historyStudent.id).slice().reverse().map((note) => <article className={note.important ? 'important-note' : ''} key={note.id}><time>{new Date(note.createdAt).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' })}</time>{note.important && <strong className="important-label">★ Belangrijk</strong>}<p>{note.text}</p></article>) : <p className="empty-state">Nog geen notities.</p>}</div>
+          </aside>
+        </div>
+      )}
+
+      {showImportantNotes && (
+        <div className="action-backdrop" onClick={() => setShowImportantNotes(false)}>
+          <aside className="history-panel important-overview" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()} aria-label="Belangrijke notities van de klas">
+            <div className="panel-heading"><div className="selected-avatar">★</div><div><p className="eyebrow">Klasoverzicht</p><h2>Belangrijke notities</h2></div><button type="button" className="close" onClick={() => setShowImportantNotes(false)} aria-label="Sluiten">×</button></div>
+            <div className="note-history">{importantNotes.length ? importantNotes.map((note) => {
+              const student = state.students.find((candidate) => candidate.id === note.studentId)
+              return <article className="important-note" key={note.id}><strong>{student?.name ?? 'Onbekende leerling'}</strong><time>{new Date(note.createdAt).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' })}</time><p>{note.text}</p></article>
+            }) : <p className="empty-state">Nog geen belangrijke notities.</p>}</div>
           </aside>
         </div>
       )}

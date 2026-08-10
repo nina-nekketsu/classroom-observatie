@@ -34,6 +34,10 @@ button:disabled { cursor: not-allowed; opacity: .46; }
 .view-tabs { position: sticky; z-index: 5; top: 0; display: flex; gap: 5px; padding: 7px; border: 1px solid var(--line); border-radius: 14px; background: rgba(247,249,245,.95); backdrop-filter: blur(12px); }
 .view-tabs button { min-height: 38px; padding: 0 15px; border-radius: 10px; color: var(--muted); background: transparent; font-size: 13px; font-weight: 800; }
 .view-tabs button[aria-selected="true"] { color: white; background: var(--forest); }
+.alphabet-nav { display: flex; gap: 4px; overflow-x: auto; margin: 0 0 10px; padding: 5px; border: 1px solid var(--line); border-radius: 11px; background: rgba(255,255,255,.82); scrollbar-width: thin; }
+.alphabet-nav a { display: grid; flex: 0 0 30px; height: 30px; place-items: center; border-radius: 8px; color: var(--forest); background: var(--mint); font-size: 11px; font-weight: 900; text-decoration: none; }
+.alphabet-nav a:hover, .alphabet-nav a:focus-visible { color: white; background: var(--forest); outline: none; }
+.attendance-card[id], .preparation-card[id] { scroll-margin-top: 62px; }
 .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 18px; padding: 20px 2px 13px; }
 .section-heading > p { max-width: 440px; margin-bottom: 0; color: var(--muted); text-align: right; font-size: 13px; }
 .compact-heading { padding-top: 16px; }
@@ -60,6 +64,8 @@ button:disabled { cursor: not-allowed; opacity: .46; }
 .score.warning { color: #83520d; background: #fae8c3; }
 .score.negative { color: #912f29; background: #f7dcd7; }
 .notes-link { width: 100%; padding: 6px 10px; color: var(--muted); background: #fafbf9; border-top: 1px solid var(--line); font-size: 10px; text-align: left; }
+.notes-link.important { color: #694800; background: #fff1a8; border-top-color: #e2bd46; font-weight: 900; }
+.important-overview-button { color: #694800; background: #fff1a8; border-color: #e2bd46; }
 .attendance-grid { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 8px; }
 .attendance-card { display: grid; grid-template-columns: 35px minmax(0,1fr); align-items: center; gap: 7px; min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: white; }
 .attendance-card.absent { background: #f3e2df; border-color: #e7c5bf; }
@@ -101,12 +107,22 @@ button:disabled { cursor: not-allowed; opacity: .46; }
 .note-composer { margin-top: 15px; padding-top: 14px; border-top: 1px solid var(--line); }
 .note-composer label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 .note-composer textarea { width: 100%; min-height: 68px; resize: vertical; padding: 10px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: white; }
+.important-toggle { display: grid !important; grid-template-columns: auto 1fr; align-items: center; gap: 1px 8px; margin-top: 8px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink) !important; background: white; cursor: pointer; letter-spacing: 0 !important; text-transform: none !important; }
+.important-toggle.checked { border-color: #e2bd46; background: #fff1a8; }
+.important-toggle input { width: 18px; height: 18px; grid-row: 1 / span 2; accent-color: #b27a00; }
+.important-toggle span { font-size: 11px; font-weight: 900; }
+.important-toggle small { color: var(--muted); font-size: 9px; font-weight: 600; }
 .note-composer > div, .return-panel > div { display: flex; justify-content: flex-end; gap: 7px; margin-top: 7px; }
 .return-panel { padding: 24px 2px 2px; }
 .return-panel p { color: var(--muted); }
 .return-panel button { min-height: 42px; padding: 0 14px; border-radius: 10px; font-weight: 800; }
 .note-history { display: grid; gap: 9px; padding-top: 14px; }
 .note-history article { padding: 12px; border-radius: 10px; background: white; border: 1px solid var(--line); }
+.note-history article.important-note { border-color: #e2bd46; background: #fff7c7; }
+.note-history .important-label { float: right; color: #8a5e00; font-size: 10px; }
+.important-overview .note-history article { display: grid; gap: 3px; }
+.important-overview .note-history article > strong { color: var(--forest); }
+.important-overview .note-history article > time { grid-row: 2; }
 .note-history time { color: var(--muted); font-size: 10px; font-weight: 800; }
 .note-history p { margin: 5px 0 0; }
 .empty-state { color: var(--muted); }

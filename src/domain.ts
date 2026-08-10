@@ -85,6 +85,7 @@ export type LessonNote = {
   id: string
   studentId: string
   text: string
+  important: boolean
   createdAt: string
   sessionStartedAt: string
 }
@@ -201,11 +202,18 @@ export function migrateStoredState(value: unknown): AppState {
     createdAt: item.createdAt as string,
     synced: item.synced === true,
   }))
-  const notes = Array.isArray(source.notes) ? source.notes.filter((item): item is LessonNote => {
+  const notes = Array.isArray(source.notes) ? source.notes.filter((item): item is Record<string, unknown> => {
     if (!item || typeof item !== 'object') return false
-    const note = item as Partial<LessonNote>
+    const note = item as Record<string, unknown>
     return typeof note.id === 'string' && typeof note.studentId === 'string' && typeof note.text === 'string' && typeof note.createdAt === 'string' && typeof note.sessionStartedAt === 'string'
-  }) : []
+  }).map((item): LessonNote => ({
+    id: item.id as string,
+    studentId: item.studentId as string,
+    text: item.text as string,
+    important: item.important === true,
+    createdAt: item.createdAt as string,
+    sessionStartedAt: item.sessionStartedAt as string,
+  })) : []
 
   return {
     className: typeof source.className === 'string' ? source.className : defaults.className,
@@ -259,13 +267,14 @@ export function setPreparationStatus(state: AppState, studentId: string, field: 
   return { ...state, students: state.students.map((student) => student.id === studentId ? { ...student, [field]: status } : student) }
 }
 
-export function addLessonNote(state: AppState, studentId: string, text: string, createdAt = new Date().toISOString()): AppState {
+export function addLessonNote(state: AppState, studentId: string, text: string, createdAt = new Date().toISOString(), important = false): AppState {
   const cleanText = text.trim()
   if (!cleanText || !state.students.some((student) => student.id === studentId)) return state
   const note: LessonNote = {
     id: `${studentId}-${createdAt}`,
     studentId,
     text: cleanText,
+    important,
     createdAt,
     sessionStartedAt: state.sessionStartedAt,
   }

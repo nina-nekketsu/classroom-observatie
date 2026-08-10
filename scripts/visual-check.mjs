@@ -20,10 +20,14 @@ try {
     await page.goto(baseUrl, { waitUntil: 'networkidle' })
 
     assert(await page.getByRole('button', { name: /afwezig melden/i }).count() === 32, `${setup.name}: attendance grid does not show 32 students`)
-    await page.screenshot({ path: `${artifactDir}${setup.name}-attendance-v2.png`, fullPage: true })
+    assert(await page.getByRole('navigation', { name: 'Alfabetische navigatie' }).getByRole('link', { name: 'N', exact: true }).getAttribute('href') === '#attendance-N', `${setup.name}: attendance alphabet navigation is missing N`)
+    assert(await page.locator('#attendance-N').count() === 1, `${setup.name}: attendance N target is missing`)
+    await page.screenshot({ path: `${artifactDir}${setup.name}-attendance-v3.png`, fullPage: true })
+    await page.getByRole('button', { name: 'Noah B. afwezig melden' }).click()
     await page.getByRole('button', { name: 'Aanwezigheid afronden' }).click()
 
-    assert(await page.locator('.student-card').count() === 32, `${setup.name}: live grid does not show 32 students`)
+    assert(await page.locator('.student-card').count() === 31, `${setup.name}: live grid does not hide the absent student`)
+    assert(await page.getByRole('button', { name: 'Noah B. selecteren' }).count() === 0, `${setup.name}: absent Noah remains selectable in live view`)
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)
     assert(!overflow, `${setup.name}: page has horizontal overflow`)
     const tabsOverflow = await page.locator('.view-tabs').evaluate((node) => node.scrollWidth > node.clientWidth)
@@ -42,16 +46,29 @@ try {
       }
     }
 
-    await page.screenshot({ path: `${artifactDir}${setup.name}-live-v2.png`, fullPage: true })
-    await page.getByRole('button', { name: 'Noah B. selecteren' }).click()
-    assert(await page.getByLabel('Observatie voor Noah B.').isVisible(), `${setup.name}: observation panel did not open`)
-    await page.screenshot({ path: `${artifactDir}${setup.name}-actions-v2.png`, fullPage: true })
-    const panel = page.getByLabel('Observatie voor Noah B.')
+    await page.screenshot({ path: `${artifactDir}${setup.name}-live-v3.png`, fullPage: true })
+    await page.getByRole('button', { name: 'Sara K. selecteren' }).click()
+    assert(await page.getByLabel('Observatie voor Sara K.').isVisible(), `${setup.name}: observation panel did not open`)
+    await page.screenshot({ path: `${artifactDir}${setup.name}-actions-v3.png`, fullPage: true })
+    const panel = page.getByLabel('Observatie voor Sara K.')
     await panel.evaluate((node) => { node.scrollTop = node.scrollHeight })
     assert(await page.getByLabel('Lesnotitie').isVisible(), `${setup.name}: lesson-note composer is not reachable by scrolling`)
+    await page.getByLabel('Lesnotitie').fill('Volgende les direct controleren.')
+    await page.getByRole('checkbox', { name: 'Belangrijke notitie' }).check()
+    await page.getByRole('button', { name: 'Notitie bewaren' }).click()
+    await page.getByRole('button', { name: 'Sluiten' }).click()
+    assert(await page.getByRole('button', { name: 'Notities van Sara K.' }).evaluate((node) => node.classList.contains('important')), `${setup.name}: important note does not highlight the live note bar`)
+    await page.getByRole('button', { name: /Belangrijke notities/ }).click()
+    assert(await page.getByLabel('Belangrijke notities van de klas').isVisible(), `${setup.name}: important-note class overview did not open`)
+    await page.screenshot({ path: `${artifactDir}${setup.name}-important-notes-v3.png`, fullPage: true })
+    await page.getByLabel('Belangrijke notities van de klas').getByRole('button', { name: 'Sluiten' }).click()
+
+    await page.getByRole('tab', { name: 'Huiswerk & spullen' }).click()
+    assert(await page.getByRole('navigation', { name: 'Alfabetische navigatie' }).getByRole('link', { name: 'N', exact: true }).getAttribute('href') === '#preparation-N', `${setup.name}: preparation alphabet navigation is missing N`)
+    assert(await page.locator('#preparation-N').count() === 1, `${setup.name}: preparation N target is missing`)
     await context.close()
   }
-  console.log('VISUAL_CHECK_OK mobile+desktop · 32 students · no horizontal overflow · no card overlap · action panel opens')
+  console.log('VISUAL_CHECK_OK mobile+desktop · 32 attendance · alphabetical navigation · absent hidden live · no overflow/overlap · important-note flow')
 } finally {
   await browser.close()
 }

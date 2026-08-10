@@ -62,11 +62,11 @@ describe('observation workflow', () => {
     expect(late.students.find((student) => student.id === 'noah')).toMatchObject({ present: true, late: true })
   })
 
-  it('stores dated lesson notes and preparation checks', () => {
-    const state = addLessonNote(createInitialState(), 'noah', 'Had extra uitleg nodig.', '2026-08-10T09:15:00.000Z')
+  it('stores dated lesson notes, importance, and preparation checks', () => {
+    const state = addLessonNote(createInitialState(), 'noah', 'Had extra uitleg nodig.', '2026-08-10T09:15:00.000Z', true)
     const checked = setPreparationStatus(state, 'noah', 'homework', 'missing')
 
-    expect(checked.notes[0]).toMatchObject({ studentId: 'noah', text: 'Had extra uitleg nodig.' })
+    expect(checked.notes[0]).toMatchObject({ studentId: 'noah', text: 'Had extra uitleg nodig.', important: true })
     expect(checked.students.find((student) => student.id === 'noah')?.homework).toBe('missing')
   })
 
@@ -88,6 +88,8 @@ describe('observation workflow', () => {
     expect(migrated.students.find((student) => student.id === 'noah')).toMatchObject({ correct: 1, answerPoints: 1, homework: 'missing', late: false })
     expect(migrated.observations).toHaveLength(1)
     expect(migrated.notes).toEqual([])
+    const migratedExistingNote = migrateStoredState({ ...legacy, notes: [{ id: 'n1', studentId: 'noah', text: 'Oud', createdAt: '2026-08-09T08:12:00.000Z', sessionStartedAt: '2026-08-09T08:00:00.000Z' }] })
+    expect(migratedExistingNote.notes[0]).toMatchObject({ text: 'Oud', important: false })
     expect(migrated.pendingSync).toBe(1)
   })
 

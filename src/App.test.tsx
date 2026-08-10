@@ -7,29 +7,35 @@ beforeEach(() => localStorage.clear())
 afterEach(() => cleanup())
 
 describe('live classroom workflow', () => {
-  it('starts with attendance, then frees the grid for live observations', async () => {
+  it('starts with attendance, offers alphabetical navigation, then hides absent students from live observations', async () => {
     const user = userEvent.setup()
     render(<App />)
 
     expect(screen.getByRole('heading', { name: 'Aanwezigheid' })).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: /afwezig melden/i })).toHaveLength(32)
+    expect(screen.getByRole('link', { name: 'N' })).toHaveAttribute('href', '#attendance-N')
+    expect(document.getElementById('attendance-N')).toHaveTextContent('Noah B.')
 
     await user.click(screen.getByRole('button', { name: 'Noah B. afwezig melden' }))
     await user.click(screen.getByRole('button', { name: 'Aanwezigheid afronden' }))
 
     expect(screen.getByRole('heading', { name: 'Kies eerst een leerling' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Sara K. afwezig melden' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Noah B. selecteren' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /selecteren/i })).toHaveLength(31)
     expect(screen.getByText('31/32')).toBeInTheDocument()
   })
 
-  it('can restore an absent student and mark them late from the student panel', async () => {
+  it('restores an absent student as late from the attendance tab', async () => {
     const user = userEvent.setup()
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: 'Noah B. afwezig melden' }))
     await user.click(screen.getByRole('button', { name: 'Aanwezigheid afronden' }))
-    await user.click(screen.getByRole('button', { name: 'Noah B. selecteren' }))
-    await user.click(screen.getByRole('button', { name: 'Aanwezig en te laat' }))
+    expect(screen.queryByRole('button', { name: 'Noah B. selecteren' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: 'Aanwezigheid' }))
+    await user.click(screen.getByRole('button', { name: 'Noah B. te laat melden' }))
+    await user.click(screen.getByRole('tab', { name: 'Live observaties' }))
 
     expect(screen.getByText('Te laat')).toBeInTheDocument()
     expect(screen.getByText('32/32')).toBeInTheDocument()
@@ -67,11 +73,46 @@ describe('live classroom workflow', () => {
     expect(screen.getByRole('button', { name: 'Waarschuwing gegeven' })).toHaveTextContent('2×')
   })
 
-  it('checks homework and materials from a dedicated compact tab', async () => {
+  it('marks a note as important, highlights the student, and shows the class-wide important overview', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Aanwezigheid afronden' }))
+    await user.click(screen.getByRole('button', { name: 'Noah B. selecteren' }))
+    await user.type(screen.getByRole('textbox', { name: 'Lesnotitie' }), 'Volgende les direct controleren.')
+    await user.click(screen.getByRole('checkbox', { name: 'Belangrijke notitie' }))
+    await user.click(screen.getByRole('button', { name: 'Notitie bewaren' }))
+    await user.click(screen.getByRole('button', { name: 'Sluiten' }))
+
+    expect(screen.getByRole('button', { name: 'Notities van Noah B.' })).toHaveClass('important')
+    await user.click(screen.getByRole('button', { name: /Belangrijke notities/i }))
+
+    expect(screen.getByLabelText('Belangrijke notities van de klas')).toHaveTextContent('Noah B.')
+    expect(screen.getByLabelText('Belangrijke notities van de klas')).toHaveTextContent('Volgende les direct controleren.')
+  })
+
+  it('does not carry an unsaved important-note draft to another student', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Aanwezigheid afronden' }))
+    await user.click(screen.getByRole('button', { name: 'Noah B. selecteren' }))
+    await user.type(screen.getByRole('textbox', { name: 'Lesnotitie' }), 'Alleen voor Noah')
+    await user.click(screen.getByRole('checkbox', { name: 'Belangrijke notitie' }))
+    await user.click(screen.getByRole('button', { name: 'Sluiten' }))
+    await user.click(screen.getByRole('button', { name: 'Sara K. selecteren' }))
+
+    expect(screen.getByRole('textbox', { name: 'Lesnotitie' })).toHaveValue('')
+    expect(screen.getByRole('checkbox', { name: 'Belangrijke notitie' })).not.toBeChecked()
+  })
+
+  it('checks homework and materials from a dedicated compact tab with alphabetical navigation', async () => {
     const user = userEvent.setup()
     render(<App />)
 
     await user.click(screen.getByRole('tab', { name: 'Huiswerk & spullen' }))
+    expect(screen.getByRole('link', { name: 'N' })).toHaveAttribute('href', '#preparation-N')
+    expect(document.getElementById('preparation-N')).toHaveTextContent('Noah B.')
     await user.click(screen.getByRole('button', { name: 'Noah B. huiswerk niet in orde' }))
     await user.click(screen.getByRole('button', { name: 'Noah B. spullen in orde' }))
 
