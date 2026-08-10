@@ -16,12 +16,16 @@ Open daarna de URL die Vite toont. De app gebruikt voor productie het Pages-basi
 
 ## Wat al werkt
 
+- realistische demonstratieklas met 32 fictieve leerlingen;
 - mobiele en desktop leerlinggrid;
-- aanwezigheid aan/uit;
-- leerling kiezen en daarna één van twaalf observatieknoppen;
+- aparte starttab voor aanwezigheid, inclusief afwezig → aanwezig/te laat herstellen;
+- leerling kiezen en daarna observaties vastleggen voor antwoorden, werkhouding, tempo, gedrag en waarschuwingen;
+- aparte snelle tab voor huiswerk- en spullencontrole;
 - pedagogisch veilig puntenmodel;
-- aparte telling voor beurten, goed, fout en niet beantwoord;
-- eerlijke randomizer op basis van het laagste aantal beurten;
+- tegeloverzicht met beurten, goed, vraagpunten en twee dominante werkhoudingssignalen;
+- herhalingstellers, onder meer voor meerdere waarschuwingen en opvolging;
+- gedateerde lesnotities met notitiegeschiedenis per leerling;
+- gewogen randomizer: alleen aanwezige leerlingen, met extra kans bij minder beurten/goede antwoorden;
 - undo van de laatste observatie;
 - lokale opslag in de browser (`localStorage`);
 - zichtbare wachtrijteller als basis voor latere synchronisatie;
@@ -37,4 +41,5 @@ Dit is bewust een publiek bereikbare, statische feedbackversie. Google-login, se
 npm test
 npm run build
 npm run lint
+node scripts/visual-check.mjs
 ```
