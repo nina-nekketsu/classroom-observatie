@@ -93,6 +93,20 @@ describe('observation workflow', () => {
     expect(migrated.pendingSync).toBe(1)
   })
 
+  it('migrates legacy neutral answers to almost-correct answers', () => {
+    const legacy = {
+      students: [{ id: 'noah', name: 'Noah B.', initials: 'NB', present: true }],
+      observations: [
+        { id: 'neutral-1', studentId: 'noah', actionId: 'neutral', points: 0, createdAt: '2026-08-09T08:10:00.000Z', synced: false },
+      ],
+    }
+
+    const migrated = migrateStoredState(legacy)
+
+    expect(migrated.observations[0]).toMatchObject({ actionId: 'almostCorrect', points: 0 })
+    expect(migrated.students.find((student) => student.id === 'noah')).toMatchObject({ turns: 1, answerPoints: 0 })
+  })
+
   it('returns the two most frequent work-attitude signals for a tile', () => {
     let state = createInitialState()
     state = applyObservation(state, 'noah', 'focused', '2026-08-10T09:00:00.000Z')

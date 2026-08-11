@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import App from './App'
@@ -41,13 +41,26 @@ describe('live classroom workflow', () => {
     expect(screen.getByText('32/32')).toBeInTheDocument()
   })
 
+  it('offers only goed, fout, bijna goed, and geen antwoord in the answer controls', async () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Aanwezigheid afronden' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Noah B. selecteren' }))
+
+    expect(screen.getByRole('button', { name: 'Goed antwoord' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Fout antwoord' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Bijna goed antwoord' })).toHaveTextContent('Bijna goed')
+    expect(screen.getByRole('button', { name: 'Niet beantwoord' })).toBeInTheDocument()
+    expect(screen.queryByText(/neutraal/i)).not.toBeInTheDocument()
+  }, 15_000)
+
   it('records an action, a lesson note, and exposes dated note history', async () => {
     const user = userEvent.setup()
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: 'Aanwezigheid afronden' }))
     await user.click(screen.getByRole('button', { name: 'Noah B. selecteren' }))
-    await user.click(screen.getByRole('button', { name: /Goed antwoord/i }))
+    await user.click(screen.getByRole('button', { name: 'Goed antwoord' }))
 
     expect(screen.getByTestId('noah-answer-points')).toHaveTextContent('1')
 

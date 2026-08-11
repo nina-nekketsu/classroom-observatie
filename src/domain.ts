@@ -3,7 +3,7 @@ export type ActionGroup = 'answer' | 'work' | 'behaviour'
 export type ActionId =
   | 'correct'
   | 'incorrect'
-  | 'neutral'
+  | 'almostCorrect'
   | 'unanswered'
   | 'focused'
   | 'offTask'
@@ -33,7 +33,7 @@ export type ObservationAction = {
 export const ACTIONS: ObservationAction[] = [
   { id: 'correct', label: 'Goed antwoord', shortLabel: 'Goed', group: 'answer', points: 1 },
   { id: 'incorrect', label: 'Fout antwoord', shortLabel: 'Fout', group: 'answer', points: 0 },
-  { id: 'neutral', label: 'Neutraal / niet beoordeeld', shortLabel: 'Neutraal', group: 'answer', points: 0 },
+  { id: 'almostCorrect', label: 'Bijna goed antwoord', shortLabel: 'Bijna goed', group: 'answer', points: 0 },
   { id: 'unanswered', label: 'Niet beantwoord', shortLabel: 'Geen antwoord', group: 'answer', points: 0 },
   { id: 'focused', label: 'Werkt geconcentreerd', shortLabel: 'Geconcentreerd', group: 'work', points: 1 },
   { id: 'offTask', label: 'Niet aan het werk', shortLabel: 'Niet aan werk', group: 'work', points: -1 },
@@ -146,7 +146,7 @@ function rebuildStudents(students: Student[], observations: Observation[]): Stud
     const student = { ...original, score: 0, answerPoints: 0, turns: 0, correct: 0, incorrect: 0, unanswered: 0 }
     for (const observation of observations.filter((item) => item.studentId === student.id)) {
       student.score += observation.points
-      if (['correct', 'incorrect', 'neutral', 'unanswered'].includes(observation.actionId)) {
+      if (['correct', 'incorrect', 'almostCorrect', 'unanswered'].includes(observation.actionId)) {
         student.turns += 1
         student.answerPoints += observation.points
       }
@@ -187,7 +187,8 @@ export function migrateStoredState(value: unknown): AppState {
       if (student) student[item.actionId] = 'missing'
     }
   }
-  const observations = rawObservations.filter((item) =>
+  const normalizedObservations = rawObservations.map((item) => item.actionId === 'neutral' ? { ...item, actionId: 'almostCorrect' } : item)
+  const observations = normalizedObservations.filter((item) =>
     typeof item.id === 'string' &&
     typeof item.studentId === 'string' &&
     typeof item.actionId === 'string' &&
