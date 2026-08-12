@@ -19,6 +19,15 @@ try {
     const page = await context.newPage()
     await page.goto(baseUrl, { waitUntil: 'networkidle' })
 
+    assert(await page.getByRole('navigation', { name: 'Hoofdnavigatie' }).isVisible(), `${setup.name}: main navigation is missing`)
+    await page.getByRole('button', { name: 'Klassen' }).click()
+    assert(await page.getByRole('heading', { name: 'Klassen' }).isVisible(), `${setup.name}: classes view did not open`)
+    assert(await page.getByLabel('CSV of TSV kiezen').isVisible(), `${setup.name}: CSV/TSV file input is missing`)
+    const classesOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)
+    assert(!classesOverflow, `${setup.name}: classes view has horizontal overflow`)
+    await page.screenshot({ path: `${artifactDir}${setup.name}-classes-v4.png`, fullPage: true })
+    await page.getByRole('button', { name: 'Live' }).click()
+
     assert(await page.getByRole('button', { name: /afwezig melden/i }).count() === 32, `${setup.name}: attendance grid does not show 32 students`)
     assert(await page.getByRole('navigation', { name: 'Alfabetische navigatie' }).getByRole('link', { name: 'N', exact: true }).getAttribute('href') === '#attendance-N', `${setup.name}: attendance alphabet navigation is missing N`)
     assert(await page.locator('#attendance-N').count() === 1, `${setup.name}: attendance N target is missing`)
@@ -68,7 +77,7 @@ try {
     assert(await page.locator('#preparation-N').count() === 1, `${setup.name}: preparation N target is missing`)
     await context.close()
   }
-  console.log('VISUAL_CHECK_OK mobile+desktop · 32 attendance · alphabetical navigation · absent hidden live · no overflow/overlap · important-note flow')
+  console.log('VISUAL_CHECK_OK mobile+desktop · main navigation · classes/import view · 32 attendance · alphabetical navigation · absent hidden live · no overflow/overlap · important-note flow')
 } finally {
   await browser.close()
 }

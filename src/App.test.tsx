@@ -133,3 +133,127 @@ describe('live classroom workflow', () => {
     expect(screen.getByTestId('noah-preparation')).toHaveTextContent('Spullen oké')
   })
 })
+
+
+describe('post-live navigation and roster management', () => {
+  it('navigates between Live, Klassen, and Overzicht and creates/selects a second class', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    expect(screen.getByRole('navigation', { name: 'Hoofdnavigatie' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Live' })).toHaveAttribute('aria-current', 'page')
+
+    await user.click(screen.getByRole('button', { name: 'Klassen' }))
+    expect(screen.getByRole('heading', { name: 'Klassen' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '✦ Kies leerling' })).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText('Klasnaam'), '4H1 · Scheikunde')
+    await user.type(screen.getByLabelText('Schooljaar'), '2026-2027')
+    await user.click(screen.getByRole('button', { name: 'Klas toevoegen' }))
+    await user.click(screen.getByRole('button', { name: '4H1 · Scheikunde selecteren' }))
+
+    expect(screen.getByRole('heading', { name: '4H1 · Scheikunde' })).toBeInTheDocument()
+    expect(screen.getByText(/2026-2027 · 0 leerlingen/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Overzicht' }))
+    expect(screen.getByRole('heading', { name: 'Overzicht' })).toBeInTheDocument()
+    expect(screen.getByText(/rapportage volgt/i)).toBeInTheDocument()
+  })
+
+  it('starts and ends a lesson session and records observations in the current session', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Live' }))
+    expect(screen.getByText(/Actieve sessie/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Les beëindigen' }))
+    expect(screen.getByText(/Geen actieve sessie/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Nieuwe les starten' }))
+    await user.click(screen.getByRole('button', { name: 'Aanwezigheid afronden' }))
+    await user.click(screen.getByRole('button', { name: 'Noah B. selecteren' }))
+    await user.click(screen.getByRole('button', { name: 'Goed antwoord' }))
+
+    expect(screen.getByLabelText('Lessessie')).toHaveTextContent('1observatie in deze sessie')
+  })
+
+  it('cannot undo an observation after the lesson has ended', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Aanwezigheid afronden' }))
+    await user.click(screen.getByRole('button', { name: 'Noah B. selecteren' }))
+    await user.click(screen.getByRole('button', { name: 'Goed antwoord' }))
+    expect(screen.getByRole('button', { name: '↶ Ongedaan maken' })).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: 'Les beëindigen' }))
+
+    expect(screen.getByRole('button', { name: '↶ Ongedaan maken' })).toBeDisabled()
+    expect(screen.getByLabelText('Lessessie')).toHaveTextContent('0observaties in deze sessie')
+  })
+
+  it('previews only confirmed fictitious imports and imports valid rows after confirmation', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Klassen' }))
+    await user.click(screen.getByRole('button', { name: /Import voorbeeld/i }))
+    expect(screen.getByText(/Bevestig dat dit fictieve testdata is/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('checkbox', { name: /Ik gebruik alleen fictieve testdata/i }))
+    await user.click(screen.getByRole('button', { name: /Import voorbeeld/i }))
+    expect(screen.getByText('Test Leerling 1')).toBeInTheDocument()
+    expect(screen.getByText('Dubbele leerlingnaam.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Import bevestigen' })).toBeDisabled()
+
+    await user.clear(screen.getByLabelText('Importgegevens'))
+    await user.type(screen.getByLabelText('Importgegevens'), 'naam\nTest Leerling 1\nDemo Student 2')
+    await user.click(screen.getByRole('button', { name: /Import voorbeeld/i }))
+    await user.click(screen.getByRole('button', { name: 'Import bevestigen' }))
+
+    expect(screen.getByLabelText('Klassenlijst')).toHaveTextContent('2026-2027 · 34 leerlingen')
+    await user.click(screen.getByRole('button', { name: 'Live' }))
+    await user.click(screen.getByRole('tab', { name: 'Aanwezigheid' }))
+    expect(screen.getByText('Test Leerling 1')).toBeInTheDocument()
+  })
+
+  it('loads a fictitious CSV file into the import preview', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Klassen' }))
+    const file = new File(['naam\nTest Leerling 9'], 'testklas.csv', { type: 'text/csv' })
+    await user.upload(screen.getByLabelText('CSV of TSV kiezen'), file)
+
+    expect(screen.getByLabelText('Importgegevens')).toHaveValue('naam\nTest Leerling 9')
+    expect(screen.getByText(/sla het werkblad eerst op als CSV/i)).toBeInTheDocument()
+  })
+
+  it('keeps important notes, latest actions, badges, and undo inside the active class session', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Aanwezigheid afronden' }))
+    await user.click(screen.getByRole('button', { name: 'Noah B. selecteren' }))
+    await user.click(screen.getByRole('button', { name: 'Goed antwoord' }))
+    await user.click(screen.getByRole('button', { name: 'Noah B. selecteren' }))
+    await user.type(screen.getByRole('textbox', { name: 'Lesnotitie' }), 'Alleen in de eerste klas.')
+    await user.click(screen.getByRole('checkbox', { name: 'Belangrijke notitie' }))
+    await user.click(screen.getByRole('button', { name: 'Notitie bewaren' }))
+    await user.click(screen.getByRole('button', { name: 'Sluiten' }))
+
+    await user.click(screen.getByRole('button', { name: 'Klassen' }))
+    await user.type(screen.getByLabelText('Klasnaam'), 'Testklas')
+    await user.click(screen.getByRole('button', { name: 'Klas toevoegen' }))
+    await user.click(screen.getByRole('button', { name: 'Testklas selecteren' }))
+    await user.click(screen.getByRole('checkbox', { name: /Ik gebruik alleen fictieve testdata/i }))
+    await user.clear(screen.getByLabelText('Importgegevens'))
+    await user.type(screen.getByLabelText('Importgegevens'), 'naam\nTest Noah')
+    await user.click(screen.getByRole('button', { name: /Import voorbeeld/i }))
+    await user.click(screen.getByRole('button', { name: 'Import bevestigen' }))
+    await user.click(screen.getByRole('button', { name: 'Live' }))
+    await user.click(screen.getByRole('button', { name: 'Nieuwe les starten' }))
+
+    expect(screen.getByRole('button', { name: /Belangrijke notities/i })).not.toHaveTextContent('(1)')
+    expect(screen.queryByText(/Laatste/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '↶ Ongedaan maken' })).toBeDisabled()
+  })
+})

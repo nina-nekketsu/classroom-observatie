@@ -33,10 +33,14 @@ Open daarna de URL die Vite toont. De app gebruikt voor productie het Pages-basi
 - lokale opslag in de browser (`localStorage`);
 - zichtbare wachtrijteller als basis voor latere synchronisatie;
 - responsive actieblad voor mobiel.
+- hoofdnavigatie voor Live, Klassen en een gereserveerd Overzicht-scherm;
+- meerdere fictieve klassen met schooljaar en actieve-klaskeuze;
+- expliciete lessessies met start/afsluiting en sessiegebonden observaties/notities;
+- CSV/TSV-bestandsselectie en plakpreview met validatie, duplicaatcontrole en een fictieve-testdata-gate;
 
 ## Belangrijke prototypegrens
 
-Dit is bewust een publiek bereikbare, statische feedbackversie. Google-login, server-side allowlist, private cloudopslag, echte synchronisatie, import, foto's en exports zijn nog niet gekoppeld. De bron en de live site mogen daarom uitsluitend fictieve of testleerlingen bevatten; zet geen echte leerlinggegevens in deze prototypeversie.
+Dit is bewust een publiek bereikbare, statische feedbackversie. Google-login, server-side allowlist, private cloudopslag, echte synchronisatie, foto's en exports zijn nog niet gekoppeld. De ingebouwde importpreview accepteert daarom uitsluitend herkenbaar fictieve testnamen. Rechtstreekse `.xlsx`-import is nog niet aanwezig; sla een Excel-werkblad eerst op als CSV. Zet geen echte leerlinggegevens in deze prototypeversie.
 
 ## Kwaliteitschecks
 

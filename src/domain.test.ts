@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
   addLessonNote,
+  confirmStudentImport,
+  createClassRecord,
   applyObservation,
   chooseRandomStudent,
   createInitialState,
   getTopWorkSignals,
   migrateStoredState,
+  previewStudentImport,
+  selectClass,
+  startLessonSession,
+  endActiveLessonSession,
   setAttendance,
   setPreparationStatus,
   undoLastObservation,
@@ -115,5 +121,148 @@ describe('observation workflow', () => {
     state = applyObservation(state, 'noah', 'talking', '2026-08-10T09:03:00.000Z')
 
     expect(getTopWorkSignals(state, 'noah')).toEqual(['Geconcentreerd ×2', 'Laag tempo'])
+  })
+})
+
+
+describe('post-live class and import workflow', () => {
+  it('migrates the live prototype state into one active class and explicit lesson session', () => {
+    const legacy = {
+      className: '3M2 · NaSk 2',
+      sessionStartedAt: '2026-08-09T08:00:00.000Z',
+      students: [{ id: 'noah', name: 'Noah B.', initials: 'NB', present: true }],
+      observations: [{ id: 'correct-1', studentId: 'noah', actionId: 'correct', points: 1, createdAt: '2026-08-09T08:10:00.000Z', synced: false }],
+      notes: [{ id: 'n1', studentId: 'noah', text: 'Oud', important: true, createdAt: '2026-08-09T08:12:00.000Z', sessionStartedAt: '2026-08-09T08:00:00.000Z' }],
+    }
+
+    const migrated = migrateStoredState(legacy)
+
+    expect(migrated.classes).toHaveLength(1)
+    expect(migrated.classes[0]).toMatchObject({ name: '3M2 · NaSk 2', schoolYear: '2026-2027' })
+    expect(migrated.activeClassId).toBe(migrated.classes[0].id)
+    expect(migrated.sessions).toHaveLength(1)
+    expect(migrated.activeSessionId).toBe(migrated.sessions[0].id)
+    expect(migrated.observations[0]).toMatchObject({ classId: migrated.classes[0].id, sessionId: migrated.sessions[0].id })
+    expect(migrated.notes[0]).toMatchObject({ classId: migrated.classes[0].id, sessionId: migrated.sessions[0].id })
+  })
+
+  it('creates and selects additional classes without losing the original class roster', () => {
+    const state = createInitialState()
+    const created = createClassRecord(state, '4H1 · Scheikunde', '2026-2027')
+    const selected = selectClass(created, created.classes[1].id)
+
+    expect(created.classes).toHaveLength(2)
+    expect(created.classes[0].students).toHaveLength(32)
+    expect(selected.activeClassId).toBe(created.classes[1].id)
+    expect(selected.className).toBe('4H1 · Scheikunde')
+    expect(selected.students).toEqual([])
+    expect(selected.activeSessionId).toBe('')
+  })
+
+  it('preserves stored student ids and live status for every class during reload', () => {
+    const state = createInitialState()
+    const created = createClassRecord(state, 'Testklas', '2026-2027')
+    const selected = selectClass(created, created.classes[1].id)
+    const preview = previewStudentImport(selected, [{ naam: 'Test Leerling 1' }], true)
+    const imported = confirmStudentImport(selected, preview)
+    const absent = setAttendance(imported, imported.students[0].id, 'absent')
+
+    const reloaded = migrateStoredState(absent)
+    const storedStudent = reloaded.classes.find((item) => item.id === absent.activeClassId)?.students[0]
+
+    expect(storedStudent).toMatchObject({ id: absent.students[0].id, name: 'Test Leerling 1', present: false })
+  })
+
+  it('does not record observations or notes without an active lesson session', () => {
+    const state = endActiveLessonSession(createInitialState(), '2026-08-09T08:50:00.000Z')
+
+    expect(applyObservation(state, 'noah', 'correct')).toBe(state)
+    expect(addLessonNote(state, 'noah', 'Mag niet buiten een les vallen.')).toBe(state)
+  })
+
+  it('clears the active session and refuses undo after a lesson ends', () => {
+    const observed = applyObservation(createInitialState(), 'noah', 'correct', '2026-08-09T08:10:00.000Z')
+    const ended = endActiveLessonSession(observed, '2026-08-09T08:50:00.000Z')
+
+    expect(ended.activeSessionId).toBe('')
+    expect(undoLastObservation(ended)).toBe(ended)
+    expect(ended.observations).toHaveLength(1)
+  })
+
+  it('preserves existing note class and session ids during reload', () => {
+    const state = addLessonNote(createInitialState(), 'noah', 'Blijft bij de bronles.', '2026-08-09T08:12:00.000Z', true)
+    const stored = state.notes[0]
+    const switched = createClassRecord(state, 'Testklas', '2026-2027')
+    const reloaded = migrateStoredState(selectClass(switched, switched.classes[1].id))
+
+    expect(reloaded.notes[0]).toMatchObject({ classId: stored.classId, sessionId: stored.sessionId })
+  })
+
+  it('undoes only the latest observation in the active class and session', () => {
+    let state = applyObservation(createInitialState(), 'noah', 'correct', '2026-08-09T08:10:00.000Z')
+    const originalClassId = state.activeClassId
+    const originalObservationId = state.observations[0].id
+    state = createClassRecord(state, 'Testklas', '2026-2027')
+    state = selectClass(state, state.classes[1].id)
+    state = confirmStudentImport(state, previewStudentImport(state, [{ naam: 'Test Noah' }], true))
+    state = startLessonSession(state, '2026-08-10T09:00:00.000Z')
+    state = applyObservation(state, state.students[0].id, 'focused', '2026-08-10T09:05:00.000Z')
+    const undone = undoLastObservation(state)
+
+    expect(undone.observations).toHaveLength(1)
+    expect(undone.observations[0]).toMatchObject({ id: originalObservationId, classId: originalClassId })
+    expect(undone.students[0].score).toBe(0)
+  })
+
+  it('limits live work signals to the active class and session', () => {
+    let state = applyObservation(createInitialState(), 'noah', 'focused', '2026-08-09T08:10:00.000Z')
+    state = createClassRecord(state, 'Testklas', '2026-2027')
+    state = selectClass(state, state.classes[1].id)
+    state = confirmStudentImport(state, previewStudentImport(state, [{ naam: 'Test Noah' }], true))
+    state = startLessonSession(state, '2026-08-10T09:00:00.000Z')
+
+    expect(getTopWorkSignals(state, state.students[0].id)).toEqual([])
+  })
+
+  it('starts and ends explicit lesson sessions and binds observations to the active session', () => {
+    let state = createInitialState()
+    state = endActiveLessonSession(state, '2026-08-09T08:50:00.000Z')
+    state = startLessonSession(state, '2026-08-10T09:00:00.000Z')
+    state = applyObservation(state, 'noah', 'correct', '2026-08-10T09:05:00.000Z')
+
+    expect(state.sessions).toHaveLength(2)
+    expect(state.sessions[0].endedAt).toBe('2026-08-09T08:50:00.000Z')
+    expect(state.activeSessionId).toBe(state.sessions[1].id)
+    expect(state.observations[0]).toMatchObject({ sessionId: state.sessions[1].id, classId: state.activeClassId })
+  })
+
+  it('previews fictitious student imports with validation, duplicate detection, and a real-data guard', () => {
+    const state = createInitialState()
+    const preview = previewStudentImport(state, [
+      { naam: 'Test Leerling 1' },
+      { naam: 'Noah B.' },
+      { naam: 'Jan Jansen' },
+      { naam: '' },
+    ], true)
+
+    expect(preview.canConfirm).toBe(false)
+    expect(preview.rows).toHaveLength(4)
+    expect(preview.rows[0]).toMatchObject({ name: 'Test Leerling 1', valid: true, duplicate: false })
+    expect(preview.rows[1]).toMatchObject({ duplicate: true })
+    expect(preview.rows[2].errors).toContain('Gebruik alleen fictieve testnamen; echte leerlingnamen zijn geblokkeerd.')
+    expect(preview.rows[3].errors).toContain('Naam ontbreekt.')
+
+    const blocked = previewStudentImport(state, [{ naam: 'Test Leerling 2' }], false)
+    expect(blocked.guardError).toContain('Bevestig dat dit fictieve testdata is')
+  })
+
+  it('confirms only valid fictitious import rows into the active class roster', () => {
+    const state = createClassRecord(createInitialState(), 'Importklas', '2026-2027')
+    const selected = selectClass(state, state.classes[1].id)
+    const preview = previewStudentImport(selected, [{ naam: 'Test Leerling 1' }, { naam: 'Demo Student 2' }], true)
+    const imported = confirmStudentImport(selected, preview)
+
+    expect(imported.students.map((student) => student.name)).toEqual(['Test Leerling 1', 'Demo Student 2'])
+    expect(imported.classes[1].students).toHaveLength(2)
   })
 })

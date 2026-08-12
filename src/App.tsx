@@ -4,14 +4,21 @@ import {
   ACTIONS,
   type ActionGroup,
   type AppState,
+  type StudentImportPreview,
   type PreparationStatus,
   type Student,
   addLessonNote,
   applyObservation,
+  confirmStudentImport,
+  createClassRecord,
   chooseRandomStudent,
   createInitialState,
   getTopWorkSignals,
   migrateStoredState,
+  previewStudentImport,
+  selectClass,
+  startLessonSession,
+  endActiveLessonSession,
   setAttendance,
   setPreparationStatus,
   undoLastObservation,
@@ -25,6 +32,7 @@ const GROUP_LABELS: Record<ActionGroup, string> = {
   behaviour: 'Gedrag & waarschuwingen',
 }
 type View = 'attendance' | 'live' | 'preparation'
+type MainView = 'live' | 'classes' | 'overview'
 
 function loadState(): AppState {
   try {
@@ -70,7 +78,7 @@ function StudentCard({ student, state, selected, highlighted, onSelect, onNotes 
   onNotes: () => void
 }) {
   const signals = getTopWorkSignals(state, student.id)
-  const studentNotes = state.notes.filter((note) => note.studentId === student.id)
+  const studentNotes = state.notes.filter((note) => note.classId === state.activeClassId && note.studentId === student.id)
   const noteCount = studentNotes.length
   const hasImportantNote = studentNotes.some((note) => note.important)
   return (
@@ -164,8 +172,22 @@ function PreparationGrid({ state, onChange }: {
   )
 }
 
+
+function parseImportText(text: string): Record<string, unknown>[] {
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+  if (!lines.length) return []
+  const [headerLine, ...dataLines] = lines
+  const headers = headerLine.split(/[;,\t]/).map((header) => header.trim().toLocaleLowerCase('nl-NL'))
+  return dataLines.map((line) => {
+    const cells = line.split(/[;,\t]/).map((cell) => cell.trim())
+    return Object.fromEntries(headers.map((header, index) => [header, cells[index] ?? '']))
+  })
+}
+
+
 function App() {
   const [state, setState] = useState<AppState>(loadState)
+  const [mainView, setMainView] = useState<MainView>('live')
   const [view, setView] = useState<View>('attendance')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [historyId, setHistoryId] = useState<string | null>(null)
@@ -174,6 +196,11 @@ function App() {
   const [noteText, setNoteText] = useState('')
   const [noteImportant, setNoteImportant] = useState(false)
   const [isOnline, setIsOnline] = useState(navigator.onLine)
+  const [classNameDraft, setClassNameDraft] = useState('')
+  const [schoolYearDraft, setSchoolYearDraft] = useState('2026-2027')
+  const [importText, setImportText] = useState('naam\nTest Leerling 1\nNoah B.')
+  const [importFictitious, setImportFictitious] = useState(false)
+  const [importPreview, setImportPreview] = useState<StudentImportPreview | null>(null)
 
   useEffect(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(state)), [state])
   useEffect(() => {
@@ -186,11 +213,14 @@ function App() {
 
   const selected = state.students.find((student) => student.id === selectedId) ?? null
   const historyStudent = state.students.find((student) => student.id === historyId) ?? null
-  const latest = state.observations.at(-1)
+  const activeSession = state.sessions.find((session) => session.id === state.activeSessionId)
+  const activeSessionObservations = state.observations.filter((observation) => observation.classId === state.activeClassId && observation.sessionId === state.activeSessionId)
+  const latest = activeSessionObservations.at(-1)
   const latestStudent = state.students.find((student) => student.id === latest?.studentId)
   const latestAction = ACTIONS.find((action) => action.id === latest?.actionId)
   const groups = useMemo(() => (['answer', 'work', 'behaviour'] as ActionGroup[]).map((group) => ({ group, actions: ACTIONS.filter((action) => action.group === group) })), [])
-  const importantNotes = state.notes.filter((note) => note.important).slice().reverse()
+  const importantNotes = state.notes.filter((note) => note.classId === state.activeClassId && note.important).slice().reverse()
+  const hasActiveSession = Boolean(activeSession && !activeSession.endedAt)
 
   const openObservation = (studentId: string) => {
     setNoteText('')
@@ -219,26 +249,54 @@ function App() {
     setSelectedId(null)
     setHistoryId(studentId)
   }
+  const addClass = () => {
+    setState((current) => createClassRecord(current, classNameDraft, schoolYearDraft))
+    setClassNameDraft('')
+  }
+  const showImportPreview = () => {
+    setImportPreview(previewStudentImport(state, parseImportText(importText), importFictitious))
+  }
+  const loadImportFile = async (file?: File) => {
+    if (!file) return
+    setImportText(await file.text())
+    setImportPreview(null)
+  }
+  const confirmImport = () => {
+    if (!importPreview) return
+    setState((current) => confirmStudentImport(current, importPreview))
+    setImportPreview(null)
+  }
 
   return (
     <div className="app-shell">
       <header className="topbar">
         <div><p className="eyebrow">Live les</p><h1>{state.className}</h1></div>
-        <div className="top-actions">
+        {mainView === 'live' && <div className="top-actions">
           <div className={`sync-pill ${isOnline ? 'online' : 'offline'}`} data-testid="pending-sync"><span className="status-dot" />{isOnline ? `${state.pendingSync} wachtend` : `Offline · ${state.pendingSync} wachtend`}</div>
           <button type="button" className="secondary important-overview-button" onClick={() => setShowImportantNotes(true)}>★ Belangrijke notities{importantNotes.length ? ` (${importantNotes.length})` : ''}</button>
           <button type="button" className="secondary" onClick={() => setState((current) => undoLastObservation(current))} disabled={!latest}>↶ Ongedaan maken</button>
           <button type="button" className="random" onClick={randomize}>✦ Kies leerling</button>
-        </div>
+        </div>}
       </header>
 
+      <nav className="main-nav" aria-label="Hoofdnavigatie">
+        <button type="button" aria-current={mainView === 'live' ? 'page' : undefined} onClick={() => setMainView('live')}>Live</button>
+        <button type="button" aria-current={mainView === 'classes' ? 'page' : undefined} onClick={() => setMainView('classes')}>Klassen</button>
+        <button type="button" aria-current={mainView === 'overview' ? 'page' : undefined} onClick={() => setMainView('overview')}>Overzicht</button>
+      </nav>
+
       <main>
+        {mainView === 'live' && <>
         <section className="session-strip" aria-label="Lessessie">
-          <div><strong>Vandaag</strong><span>{new Date(state.sessionStartedAt).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })} gestart</span></div>
+          <div><strong>{hasActiveSession ? 'Actieve sessie' : 'Geen actieve sessie'}</strong><span>{new Date(state.sessionStartedAt).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })} gestart</span></div>
           <div><strong>{state.students.filter((student) => student.present).length}/{state.students.length}</strong><span>aanwezig</span></div>
-          <div><strong>{state.observations.length}</strong><span>observaties</span></div>
+          <div><strong>{activeSessionObservations.length}</strong><span>{activeSessionObservations.length === 1 ? 'observatie in deze sessie' : 'observaties in deze sessie'}</span></div>
           {latest && <div className="latest"><strong>Laatste</strong><span>{latestStudent?.name} · {latestAction?.shortLabel}</span></div>}
         </section>
+        <div className="lesson-actions">
+          <button type="button" className="secondary" onClick={() => setState((current) => endActiveLessonSession(current))} disabled={!hasActiveSession}>Les beëindigen</button>
+          <button type="button" className="random" onClick={() => setState((current) => startLessonSession(current))}>Nieuwe les starten</button>
+        </div>
 
         <nav className="view-tabs" role="tablist" aria-label="Live weergaven">
           <button role="tab" aria-selected={view === 'attendance'} onClick={() => setView('attendance')}>Aanwezigheid</button>
@@ -254,6 +312,33 @@ function App() {
             {state.students.filter((student) => student.present).map((student) => <StudentCard key={student.id} student={student} state={state} selected={student.id === selectedId} highlighted={student.id === randomId} onSelect={() => { openObservation(student.id); setRandomId(null) }} onNotes={() => openHistory(student.id)} />)}
           </section>
         </>}
+        </>}
+        {mainView === 'classes' && <section className="classes-view">
+          <div className="section-heading"><div><p className="eyebrow">Beheer</p><h2>Klassen</h2></div><p>Gebruik hier uitsluitend fictieve testdata. De publieke prototype-opslag is niet bedoeld voor echte leerlinggegevens.</p></div>
+          <section className="class-create">
+            <label>Klasnaam<input aria-label="Klasnaam" value={classNameDraft} onChange={(event) => setClassNameDraft(event.target.value)} /></label>
+            <label>Schooljaar<input aria-label="Schooljaar" value={schoolYearDraft} onChange={(event) => setSchoolYearDraft(event.target.value)} /></label>
+            <button type="button" className="random" onClick={addClass} disabled={!classNameDraft.trim()}>Klas toevoegen</button>
+          </section>
+          <section className="class-list" aria-label="Klassenlijst">
+            {state.classes.map((classRecord) => <article key={classRecord.id} className={classRecord.id === state.activeClassId ? 'selected-class' : ''}>
+              <div><strong>{classRecord.name}</strong><span>{classRecord.schoolYear} · {classRecord.students.length} leerlingen</span></div>
+              <button type="button" className="secondary" onClick={() => setState((current) => selectClass(current, classRecord.id))}>{classRecord.name} selecteren</button>
+            </article>)}
+          </section>
+          <section className="import-panel">
+            <h3>CSV/TSV import-preview</h3>
+            <p className="warning-copy">Alleen fictieve testdata. Echte leerlinggegevens zijn geblokkeerd in deze publieke prototype-flow.</p>
+            <label className="fictitious-check"><input type="checkbox" aria-label="Ik gebruik alleen fictieve testdata" checked={importFictitious} onChange={(event) => setImportFictitious(event.target.checked)} /> Ik gebruik alleen fictieve testdata</label>
+            <label>CSV/TSV-bestand<input aria-label="CSV of TSV kiezen" type="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values" onChange={(event) => void loadImportFile(event.target.files?.[0])} /></label>
+            <p className="field-help">Excel: sla het werkblad eerst op als CSV. Rechtstreekse .xlsx-import volgt pas na goedkeuring van de benodigde parser.</p>
+            <label>Importgegevens plakken of controleren<textarea aria-label="Importgegevens" value={importText} onChange={(event) => setImportText(event.target.value)} /></label>
+            <button type="button" className="secondary" onClick={showImportPreview}>Import voorbeeld bekijken</button>
+            {importPreview?.guardError && <p className="import-error">{importPreview.guardError}</p>}
+            {importPreview && importPreview.rows.length > 0 && <div className="import-preview"><table><thead><tr><th>Rij</th><th>Naam</th><th>Status</th></tr></thead><tbody>{importPreview.rows.map((row) => <tr key={row.rowNumber}><td>{row.rowNumber}</td><td>{row.name}</td><td>{row.valid ? 'Geldig' : row.errors.map((error) => <span key={error}>{error}</span>)}</td></tr>)}</tbody></table><button type="button" className="random" onClick={confirmImport} disabled={!importPreview.canConfirm}>Import bevestigen</button></div>}
+          </section>
+        </section>}
+        {mainView === 'overview' && <section className="overview-view"><div className="section-heading"><div><p className="eyebrow">Later</p><h2>Overzicht</h2></div></div><p className="empty-state">Rapportage volgt in een volgende slice.</p></section>}
       </main>
 
       {selected && (
@@ -270,7 +355,7 @@ function App() {
             ) : (
               <>
                 <div className="action-groups">{groups.map(({ group, actions }) => <section key={group}><h3>{GROUP_LABELS[group]}</h3><div className="action-grid">{actions.map((action) => {
-                  const count = state.observations.filter((observation) => observation.studentId === selected.id && observation.actionId === action.id).length
+                  const count = activeSessionObservations.filter((observation) => observation.studentId === selected.id && observation.actionId === action.id).length
                   return <button key={action.id} type="button" className={`action-button points-${Math.sign(action.points)}`} onClick={() => record(action.id)} aria-label={action.label}><span>{action.shortLabel}{count > 0 && <small>{count}×</small>}</span><b>{action.points > 0 ? '+' : ''}{action.points}</b></button>
                 })}</div></section>)}</div>
                 <section className="note-composer">
@@ -289,7 +374,7 @@ function App() {
         <div className="action-backdrop" onClick={() => setHistoryId(null)}>
           <aside className="history-panel" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()} aria-label={`Notitiegeschiedenis van ${historyStudent.name}`}>
             <div className="panel-heading"><div className="selected-avatar">{historyStudent.initials}</div><div><p className="eyebrow">Notitiegeschiedenis</p><h2>{historyStudent.name}</h2></div><button type="button" className="close" onClick={() => setHistoryId(null)} aria-label="Sluiten">×</button></div>
-            <div className="note-history">{state.notes.filter((note) => note.studentId === historyStudent.id).length ? state.notes.filter((note) => note.studentId === historyStudent.id).slice().reverse().map((note) => <article className={note.important ? 'important-note' : ''} key={note.id}><time>{new Date(note.createdAt).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' })}</time>{note.important && <strong className="important-label">★ Belangrijk</strong>}<p>{note.text}</p></article>) : <p className="empty-state">Nog geen notities.</p>}</div>
+            <div className="note-history">{state.notes.filter((note) => note.classId === state.activeClassId && note.studentId === historyStudent.id).length ? state.notes.filter((note) => note.classId === state.activeClassId && note.studentId === historyStudent.id).slice().reverse().map((note) => <article className={note.important ? 'important-note' : ''} key={note.id}><time>{new Date(note.createdAt).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' })}</time>{note.important && <strong className="important-label">★ Belangrijk</strong>}<p>{note.text}</p></article>) : <p className="empty-state">Nog geen notities.</p>}</div>
           </aside>
         </div>
       )}
