@@ -155,8 +155,8 @@ describe('post-live navigation and roster management', () => {
     expect(screen.getByText(/2026-2027 · 0 leerlingen/)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Overzicht' }))
-    expect(screen.getByRole('heading', { name: 'Overzicht' })).toBeInTheDocument()
-    expect(screen.getByText(/rapportage volgt/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Leerlingoverzicht' })).toBeInTheDocument()
+    expect(screen.getByText(/kies een leerling om aantallen/i)).toBeInTheDocument()
   })
 
   it('starts and ends a lesson session and records observations in the current session', async () => {
@@ -255,5 +255,61 @@ describe('post-live navigation and roster management', () => {
     expect(screen.getByRole('button', { name: /Belangrijke notities/i })).not.toHaveTextContent('(1)')
     expect(screen.queryByText(/Laatste/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '↶ Ongedaan maken' })).toBeDisabled()
+  })
+
+  it('shows a student overview with transparent answer counts and a lesson filter', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Aanwezigheid afronden' }))
+    for (const action of ['Goed antwoord', 'Fout antwoord', 'Bijna goed antwoord']) {
+      await user.click(screen.getByRole('button', { name: 'Noah B. selecteren' }))
+      await user.click(screen.getByRole('button', { name: action }))
+    }
+    await user.click(screen.getByRole('button', { name: 'Noah B. selecteren' }))
+    await user.type(screen.getByRole('textbox', { name: 'Lesnotitie' }), 'Eerste sessie.')
+    await user.click(screen.getByRole('button', { name: 'Notitie bewaren' }))
+    await user.click(screen.getByRole('button', { name: 'Sluiten' }))
+    await user.click(screen.getByRole('button', { name: 'Les beëindigen' }))
+    await user.click(screen.getByRole('button', { name: 'Nieuwe les starten' }))
+    await user.click(screen.getByRole('button', { name: 'Noah B. selecteren' }))
+    await user.click(screen.getByRole('button', { name: 'Goed antwoord' }))
+
+    await user.click(screen.getByRole('button', { name: 'Overzicht' }))
+
+    expect(screen.getByRole('heading', { name: 'Leerlingoverzicht' })).toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText('Leerling'), 'noah')
+    expect(screen.getByTestId('overview-turns')).toHaveTextContent('4')
+    expect(screen.getByTestId('overview-correct')).toHaveTextContent('2')
+    expect(screen.getByTestId('overview-incorrect')).toHaveTextContent('1')
+    expect(screen.getByTestId('overview-almost-correct')).toHaveTextContent('1')
+    expect(screen.getByTestId('overview-unanswered')).toHaveTextContent('0')
+    expect(screen.getByText('Eerste sessie.')).toBeInTheDocument()
+
+    const firstSessionId = screen.getAllByRole('option', { name: /Les van/ })[0].getAttribute('value')
+    await user.selectOptions(screen.getByLabelText('Lessessie'), firstSessionId ?? '')
+    expect(screen.getByTestId('overview-turns')).toHaveTextContent('3')
+    expect(screen.getByTestId('overview-correct')).toHaveTextContent('1')
+  })
+
+  it('clears stale student and lesson filters after switching classes', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Overzicht' }))
+    await user.selectOptions(screen.getByLabelText('Leerling'), 'noah')
+    const firstSessionId = screen.getAllByRole('option', { name: /Les van/ })[0].getAttribute('value')
+    await user.selectOptions(screen.getByLabelText('Lessessie'), firstSessionId ?? '')
+
+    await user.click(screen.getByRole('button', { name: 'Klassen' }))
+    await user.type(screen.getByLabelText('Klasnaam'), 'Testklas')
+    await user.click(screen.getByRole('button', { name: 'Klas toevoegen' }))
+    await user.click(screen.getByRole('button', { name: 'Testklas selecteren' }))
+    await user.click(screen.getByRole('button', { name: '3M2 · NaSk 2 selecteren' }))
+    await user.click(screen.getByRole('button', { name: 'Overzicht' }))
+
+    expect(screen.getByLabelText('Leerling')).toHaveValue('')
+    expect(screen.getByLabelText('Lessessie')).toHaveValue('all')
+    expect(screen.getByText(/kies een leerling om aantallen/i)).toBeInTheDocument()
   })
 })

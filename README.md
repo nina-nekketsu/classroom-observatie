@@ -33,10 +33,11 @@ Open daarna de URL die Vite toont. De app gebruikt voor productie het Pages-basi
 - lokale opslag in de browser (`localStorage`);
 - zichtbare wachtrijteller als basis voor latere synchronisatie;
 - responsive actieblad voor mobiel.
-- hoofdnavigatie voor Live, Klassen en een gereserveerd Overzicht-scherm;
+- hoofdnavigatie voor Live, Klassen en Overzicht;
 - meerdere fictieve klassen met schooljaar en actieve-klaskeuze;
 - expliciete lessessies met start/afsluiting en sessiegebonden observaties/notities;
 - CSV/TSV-bestandsselectie en plakpreview met validatie, duplicaatcontrole en een fictieve-testdata-gate;
+- leerlingoverzicht met lesfilter, afzonderlijke aantallen voor goed/fout/bijna goed/geen antwoord en de onderliggende observatie- en notitieregels;
 
 ## Belangrijke prototypegrens
 

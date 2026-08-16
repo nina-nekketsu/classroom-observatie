@@ -201,8 +201,14 @@ function App() {
   const [importText, setImportText] = useState('naam\nTest Leerling 1\nNoah B.')
   const [importFictitious, setImportFictitious] = useState(false)
   const [importPreview, setImportPreview] = useState<StudentImportPreview | null>(null)
+  const [overviewStudentId, setOverviewStudentId] = useState('')
+  const [overviewSessionId, setOverviewSessionId] = useState('all')
 
   useEffect(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(state)), [state])
+  useEffect(() => {
+    setOverviewStudentId('')
+    setOverviewSessionId('all')
+  }, [state.activeClassId])
   useEffect(() => {
     const online = () => setIsOnline(true)
     const offline = () => setIsOnline(false)
@@ -221,6 +227,20 @@ function App() {
   const groups = useMemo(() => (['answer', 'work', 'behaviour'] as ActionGroup[]).map((group) => ({ group, actions: ACTIONS.filter((action) => action.group === group) })), [])
   const importantNotes = state.notes.filter((note) => note.classId === state.activeClassId && note.important).slice().reverse()
   const hasActiveSession = Boolean(activeSession && !activeSession.endedAt)
+  const overviewSessions = state.sessions.filter((session) => session.classId === state.activeClassId)
+  const overviewStudent = state.students.find((student) => student.id === overviewStudentId) ?? null
+  const overviewObservations = state.observations.filter((observation) =>
+    observation.classId === state.activeClassId &&
+    observation.studentId === overviewStudentId &&
+    (overviewSessionId === 'all' || observation.sessionId === overviewSessionId),
+  )
+  const overviewNotes = state.notes.filter((note) =>
+    note.classId === state.activeClassId &&
+    note.studentId === overviewStudentId &&
+    (overviewSessionId === 'all' || note.sessionId === overviewSessionId),
+  ).slice().reverse()
+  const answerCount = (actionId: 'correct' | 'incorrect' | 'almostCorrect' | 'unanswered') => overviewObservations.filter((observation) => observation.actionId === actionId).length
+  const overviewTurns = overviewObservations.filter((observation) => ['correct', 'incorrect', 'almostCorrect', 'unanswered'].includes(observation.actionId)).length
 
   const openObservation = (studentId: string) => {
     setNoteText('')
@@ -338,7 +358,27 @@ function App() {
             {importPreview && importPreview.rows.length > 0 && <div className="import-preview"><table><thead><tr><th>Rij</th><th>Naam</th><th>Status</th></tr></thead><tbody>{importPreview.rows.map((row) => <tr key={row.rowNumber}><td>{row.rowNumber}</td><td>{row.name}</td><td>{row.valid ? 'Geldig' : row.errors.map((error) => <span key={error}>{error}</span>)}</td></tr>)}</tbody></table><button type="button" className="random" onClick={confirmImport} disabled={!importPreview.canConfirm}>Import bevestigen</button></div>}
           </section>
         </section>}
-        {mainView === 'overview' && <section className="overview-view"><div className="section-heading"><div><p className="eyebrow">Later</p><h2>Overzicht</h2></div></div><p className="empty-state">Rapportage volgt in een volgende slice.</p></section>}
+        {mainView === 'overview' && <section className="overview-view">
+          <div className="section-heading"><div><p className="eyebrow">Rapportage</p><h2>Leerlingoverzicht</h2></div><p>Iedere kleur en conclusie blijft herleidbaar tot de onderliggende observaties.</p></div>
+          <section className="overview-filters" aria-label="Overzichtsfilters">
+            <label>Leerling<select aria-label="Leerling" value={overviewStudentId} onChange={(event) => setOverviewStudentId(event.target.value)}><option value="">Kies een leerling</option>{alphabetized(state.students).map((student) => <option key={student.id} value={student.id}>{student.name}</option>)}</select></label>
+            <label>Lessessie<select aria-label="Lessessie" value={overviewSessionId} onChange={(event) => setOverviewSessionId(event.target.value)}><option value="all">Alle lessen</option>{overviewSessions.map((session) => <option key={session.id} value={session.id}>Les van {new Date(session.startedAt).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' })}</option>)}</select></label>
+          </section>
+          {overviewStudent ? <>
+            <section className="overview-heading"><span className="selected-avatar">{overviewStudent.initials}</span><div><p className="eyebrow">Geselecteerde leerling</p><h3>{overviewStudent.name}</h3></div></section>
+            <section className="overview-metrics" aria-label="Antwoordaantallen">
+              <article><strong data-testid="overview-turns">{overviewTurns}</strong><span>Beurten</span></article>
+              <article><strong data-testid="overview-correct">{answerCount('correct')}</strong><span>Goed</span></article>
+              <article><strong data-testid="overview-incorrect">{answerCount('incorrect')}</strong><span>Fout</span></article>
+              <article><strong data-testid="overview-almost-correct">{answerCount('almostCorrect')}</strong><span>Bijna goed</span></article>
+              <article><strong data-testid="overview-unanswered">{answerCount('unanswered')}</strong><span>Geen antwoord</span></article>
+            </section>
+            <section className="overview-detail-grid">
+              <div><h3>Observaties</h3>{overviewObservations.length ? <div className="overview-log">{overviewObservations.slice().reverse().map((observation) => <article key={observation.id}><time>{new Date(observation.createdAt).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' })}</time><strong>{ACTIONS.find((action) => action.id === observation.actionId)?.label ?? observation.actionId}</strong><span>{observation.points > 0 ? '+' : ''}{observation.points} punt</span></article>)}</div> : <p className="empty-state">Geen observaties binnen deze selectie.</p>}</div>
+              <div><h3>Notities</h3>{overviewNotes.length ? <div className="overview-log">{overviewNotes.map((note) => <article className={note.important ? 'important-note' : ''} key={note.id}><time>{new Date(note.createdAt).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' })}</time><p>{note.text}</p></article>)}</div> : <p className="empty-state">Geen notities binnen deze selectie.</p>}</div>
+            </section>
+          </> : <p className="empty-state overview-empty">Kies een leerling om aantallen, bronobservaties en notities te bekijken.</p>}
+        </section>}
       </main>
 
       {selected && (
