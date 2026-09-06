@@ -9,6 +9,8 @@
     "typecheck:server": "tsc -p tsconfig.node.json --noEmit",
     "test:server": "vitest run server",
     "server": "tsx server/index.ts",
+    "private:backup": "tsx server/databaseBackupCli.ts backup",
+    "private:restore": "tsx server/databaseBackupCli.ts restore",
     "lint": "oxlint",
     "test": "vitest run",
     "preview": "vite preview"

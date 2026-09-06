@@ -49,6 +49,34 @@ De code bevat nu een opt-in `secure-sync`-modus, een duurzame idempotente observ
 
 Kopieer `.env.example` alleen naar een niet-gecommit `.env` en vul de echte waarden lokaal/in het deployment-secretbeheer in. Start de backend met `npm run server`. Publiceer de backend uitsluitend achter HTTPS en een same-origin reverse proxy naar `/api`; cross-origin wildcards zijn niet toegestaan. De productie-gate is pas open nadat Google OAuth, de exacte docentallowlist, private persistente opslag, backup/restore en een live synchronisatietest zijn geconfigureerd.
 
+### Private same-origin deployment
+
+`npm run server` serves both the production bundle at `/classroom-observatie/` and the authenticated API at `/api/sync`, bound to `127.0.0.1`. Build secure mode explicitly:
+
+```bash
+VITE_RUNTIME_MODE=secure-sync \
+VITE_SYNC_ENDPOINT=/api/sync \
+VITE_GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
+npm run build
+
+STATIC_DIST_PATH="$PWD/dist" npm run server
+```
+
+A reverse proxy such as Tailscale Serve may expose only those two paths over HTTPS. Keep the service tailnet-private; do not enable Funnel. The Google OAuth web client must list the exact HTTPS origin used by the browser.
+
+Runtime database backups use SQLite's online backup API plus an integrity check:
+
+```bash
+SYNC_SQLITE_PATH=/protected/path/live.sqlite \
+SYNC_BACKUP_DIR=/protected/path/backups \
+npm run private:backup
+
+SYNC_SQLITE_PATH=/protected/path/restored.sqlite \
+npm run private:restore -- /protected/path/backups/<backup>.sqlite
+```
+
+Restore refuses to overwrite an existing database unless `--replace` is passed. Both the live database and every backup must reside on encrypted storage with restricted permissions. If FileVault or equivalent at-rest encryption is unavailable, the real-data production gate remains closed.
+
 ## Kwaliteitschecks
 
 ```bash

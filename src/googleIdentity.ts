@@ -6,6 +6,7 @@ type GoogleIdentity = {
     id: {
       initialize(options: { client_id: string; callback: (response: CredentialResponse) => void }): void
       prompt(callback: (notification: { isNotDisplayed(): boolean; isSkippedMoment(): boolean }) => void): void
+      renderButton(parent: HTMLElement, options: { type: 'standard'; theme: 'outline'; size: 'large'; text: 'signin_with'; width: number }): void
     }
   }
 }
@@ -53,12 +54,26 @@ export function createGoogleIdTokenProvider(clientId: string): TokenProvider {
         const finish = (token: string | null) => {
           if (settled) return
           settled = true
+          document.querySelector('[data-google-sign-in-fallback]')?.remove()
           cachedToken = token
           resolve(token)
         }
+        const renderVisibleFallback = () => {
+          if (document.querySelector('[data-google-sign-in-fallback]')) return
+          const container = document.createElement('div')
+          container.dataset.googleSignInFallback = 'true'
+          container.setAttribute('aria-label', 'Google Sign-In')
+          container.style.position = 'fixed'
+          container.style.right = '1rem'
+          container.style.bottom = '1rem'
+          container.style.zIndex = '1000'
+          document.body.append(container)
+          identity.renderButton(container, { type: 'standard', theme: 'outline', size: 'large', text: 'signin_with', width: 240 })
+        }
         identity.initialize({ client_id: clientId, callback: (response) => finish(response.credential ?? null) })
+        renderVisibleFallback()
         identity.prompt((notification) => {
-          if (notification.isNotDisplayed() || notification.isSkippedMoment()) finish(null)
+          if (notification.isNotDisplayed() || notification.isSkippedMoment()) renderVisibleFallback()
         })
       })
     })().finally(() => { pending = null })
