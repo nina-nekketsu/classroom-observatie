@@ -26,6 +26,25 @@ try {
     const classesOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)
     assert(!classesOverflow, `${setup.name}: classes view has horizontal overflow`)
     await page.screenshot({ path: `${artifactDir}${setup.name}-classes-v4.png`, fullPage: true })
+    await page.getByRole('button', { name: 'Overzicht' }).click()
+    assert(await page.getByRole('heading', { name: 'Leerlingoverzicht' }).isVisible(), `${setup.name}: student overview did not open`)
+    await page.getByLabel('Leerling').selectOption('noah')
+    assert(await page.getByTestId('overview-turns').textContent() === '0', `${setup.name}: overview count is not visible`)
+    const overviewOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)
+    assert(!overviewOverflow, `${setup.name}: overview has horizontal overflow`)
+    const metricBoxes = await page.locator('.overview-metrics article').evaluateAll((nodes) => nodes.map((node) => {
+      const box = node.getBoundingClientRect()
+      return { left: box.left, right: box.right, top: box.top, bottom: box.bottom }
+    }))
+    for (let index = 0; index < metricBoxes.length; index += 1) {
+      for (let other = index + 1; other < metricBoxes.length; other += 1) {
+        const a = metricBoxes[index]
+        const b = metricBoxes[other]
+        const overlaps = a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
+        assert(!overlaps, `${setup.name}: overview metric cards ${index + 1} and ${other + 1} overlap`)
+      }
+    }
+    await page.screenshot({ path: `${artifactDir}${setup.name}-overview-v1.png`, fullPage: true })
     await page.getByRole('button', { name: 'Live' }).click()
 
     assert(await page.getByRole('button', { name: /afwezig melden/i }).count() === 32, `${setup.name}: attendance grid does not show 32 students`)
@@ -77,7 +96,7 @@ try {
     assert(await page.locator('#preparation-N').count() === 1, `${setup.name}: preparation N target is missing`)
     await context.close()
   }
-  console.log('VISUAL_CHECK_OK mobile+desktop · main navigation · classes/import view · 32 attendance · alphabetical navigation · absent hidden live · no overflow/overlap · important-note flow')
+  console.log('VISUAL_CHECK_OK mobile+desktop · main navigation · classes/import · student overview · 32 attendance · alphabetical navigation · absent hidden live · no overflow/overlap · important-note flow')
 } finally {
   await browser.close()
 }
