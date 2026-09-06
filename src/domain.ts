@@ -124,6 +124,8 @@ export type StudentImportPreview = {
   guardError?: string
 }
 
+import { operationFromObservation, type SyncOperation } from './syncQueue'
+
 export type AppState = {
   className: string
   sessionStartedAt: string
@@ -134,6 +136,7 @@ export type AppState = {
   students: Student[]
   observations: Observation[]
   notes: LessonNote[]
+  syncQueue: SyncOperation[]
   pendingSync: number
 }
 
@@ -239,6 +242,7 @@ export function createInitialState(): AppState {
     students,
     observations: [],
     notes: [],
+    syncQueue: [],
     pendingSync: 0,
   }
 }
@@ -370,6 +374,7 @@ export function migrateStoredState(value: unknown): AppState {
     students: cloneStudents(selectedStudents),
     observations: observationsWithSession,
     notes: notesWithSession,
+    syncQueue: Array.isArray(source.syncQueue) ? source.syncQueue.filter((item): item is SyncOperation => Boolean(item) && typeof item === 'object' && typeof (item as Record<string, unknown>).id === 'string') : observationsWithSession.filter((item) => !item.synced).map(operationFromObservation),
     pendingSync: observationsWithSession.filter((item) => !item.synced).length,
   }
 }
@@ -389,9 +394,10 @@ export function applyObservation(state: AppState, studentId: string, actionId: A
     synced: false,
   }
   const observations = [...state.observations, observation]
+  const syncQueue = state.syncQueue.some((item) => item.id === `observation:${observation.id}`) ? state.syncQueue : [...state.syncQueue, operationFromObservation(observation)]
   {
     const students = rebuildStudents(state.students, observations.filter((item) => item.classId === state.activeClassId))
-    return { ...state, observations, students, classes: syncActiveClassStudents(state, students), pendingSync: observations.filter((item) => !item.synced).length }
+    return { ...state, observations, syncQueue, students, classes: syncActiveClassStudents(state, students), pendingSync: syncQueue.length }
   }
 }
 
@@ -400,10 +406,15 @@ export function undoLastObservation(state: AppState): AppState {
   if (!activeSession) return state
   const targetIndex = state.observations.findLastIndex((item) => item.classId === state.activeClassId && item.sessionId === state.activeSessionId)
   if (targetIndex < 0) return state
+  const target = state.observations[targetIndex]
+  // A server-accepted observation needs an explicit delete mutation; silently
+  // removing it locally would make the client and private store diverge.
+  if (target.synced) return state
   const observations = state.observations.filter((_, index) => index !== targetIndex)
+  const syncQueue = state.syncQueue.filter((operation) => operation.entityId !== target.id)
   {
     const students = rebuildStudents(state.students, observations.filter((item) => item.classId === state.activeClassId))
-    return { ...state, observations, students, classes: syncActiveClassStudents(state, students), pendingSync: observations.filter((item) => !item.synced).length }
+    return { ...state, observations, syncQueue, students, classes: syncActiveClassStudents(state, students), pendingSync: syncQueue.length }
   }
 }
 

@@ -39,6 +39,8 @@ describe('observation workflow', () => {
     const undone = undoLastObservation(two)
 
     expect(undone.observations).toHaveLength(1)
+    expect(undone.syncQueue.map((item) => item.entityId)).toEqual([one.observations[0].id])
+    expect(undone.pendingSync).toBe(1)
     expect(undone.students.find((student) => student.id === 'noah')?.score).toBe(1)
   })
 
