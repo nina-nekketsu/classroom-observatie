@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
+import { createGoogleIdTokenProvider } from './googleIdentity'
+import { resolveRuntimeConfig, type RuntimeConfig } from './runtimeConfig'
+import { applySyncFailure, applySyncResponse, getSyncStatus } from './syncQueue'
+import { createSyncTransport, type Fetcher, type TokenProvider } from './syncTransport'
 import {
   ACTIONS,
   type ActionGroup,
@@ -185,7 +189,18 @@ function parseImportText(text: string): Record<string, unknown>[] {
 }
 
 
-function App() {
+type AppProps = {
+  runtimeConfig?: RuntimeConfig
+  tokenProvider?: TokenProvider
+  fetcher?: Fetcher
+}
+
+function App({ runtimeConfig: configuredRuntime, tokenProvider: configuredTokenProvider, fetcher }: AppProps = {}) {
+  const runtimeConfig = useMemo(() => configuredRuntime ?? resolveRuntimeConfig(), [configuredRuntime])
+  const tokenProvider = useMemo(() => configuredTokenProvider ?? (
+    runtimeConfig.googleClientId ? createGoogleIdTokenProvider(runtimeConfig.googleClientId) : async () => null
+  ), [configuredTokenProvider, runtimeConfig.googleClientId])
+  const transport = useMemo(() => createSyncTransport(runtimeConfig, tokenProvider, fetcher), [runtimeConfig, tokenProvider, fetcher])
   const [state, setState] = useState<AppState>(loadState)
   const [mainView, setMainView] = useState<MainView>('live')
   const [view, setView] = useState<View>('attendance')
@@ -216,6 +231,15 @@ function App() {
     window.addEventListener('offline', offline)
     return () => { window.removeEventListener('online', online); window.removeEventListener('offline', offline) }
   }, [])
+  useEffect(() => {
+    const candidates = state.syncQueue.filter((operation) => operation.status === 'pending')
+    if (!runtimeConfig.syncEnabled || !isOnline || !candidates.length) return
+    let active = true
+    void transport(candidates)
+      .then((response) => { if (active) setState((current) => applySyncResponse(current, response)) })
+      .catch((error) => { if (active) setState((current) => applySyncFailure(current, candidates.map((operation) => operation.id), error)) })
+    return () => { active = false }
+  }, [isOnline, runtimeConfig.syncEnabled, state, transport])
 
   const selected = state.students.find((student) => student.id === selectedId) ?? null
   const historyStudent = state.students.find((student) => student.id === historyId) ?? null
@@ -226,6 +250,7 @@ function App() {
   const latestAction = ACTIONS.find((action) => action.id === latest?.actionId)
   const groups = useMemo(() => (['answer', 'work', 'behaviour'] as ActionGroup[]).map((group) => ({ group, actions: ACTIONS.filter((action) => action.group === group) })), [])
   const importantNotes = state.notes.filter((note) => note.classId === state.activeClassId && note.important).slice().reverse()
+  const syncStatus = getSyncStatus(state)
   const hasActiveSession = Boolean(activeSession && !activeSession.endedAt)
   const overviewSessions = state.sessions.filter((session) => session.classId === state.activeClassId)
   const overviewStudent = state.students.find((student) => student.id === overviewStudentId) ?? null
@@ -292,7 +317,8 @@ function App() {
       <header className="topbar">
         <div><p className="eyebrow">Live les</p><h1>{state.className}</h1></div>
         {mainView === 'live' && <div className="top-actions">
-          <div className={`sync-pill ${isOnline ? 'online' : 'offline'}`} data-testid="pending-sync"><span className="status-dot" />{isOnline ? `${state.pendingSync} wachtend` : `Offline · ${state.pendingSync} wachtend`}</div>
+          <div className={`sync-pill ${isOnline ? 'online' : 'offline'}`} data-testid="pending-sync"><span className="status-dot" />{isOnline ? `${syncStatus.pending} wachtend` : `Offline · ${syncStatus.pending} wachtend`}{syncStatus.failed ? ` · ${syncStatus.failed} mislukt` : ''}{syncStatus.conflict ? ` · ${syncStatus.conflict} conflict` : ''}</div>
+          {runtimeConfig.syncEnabled && syncStatus.failed > 0 && <button type="button" className="secondary" onClick={() => setState((current) => ({ ...current, syncQueue: current.syncQueue.map((operation) => operation.status === 'failed' ? { ...operation, status: 'pending' as const } : operation) }))}>Synchronisatie opnieuw proberen</button>}
           <button type="button" className="secondary important-overview-button" onClick={() => setShowImportantNotes(true)}>★ Belangrijke notities{importantNotes.length ? ` (${importantNotes.length})` : ''}</button>
           <button type="button" className="secondary" onClick={() => setState((current) => undoLastObservation(current))} disabled={!latest}>↶ Ongedaan maken</button>
           <button type="button" className="random" onClick={randomize}>✦ Kies leerling</button>

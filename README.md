@@ -43,11 +43,19 @@ Open daarna de URL die Vite toont. De app gebruikt voor productie het Pages-basi
 
 Dit is bewust een publiek bereikbare, statische feedbackversie. Google-login, server-side allowlist, private cloudopslag, echte synchronisatie, foto's en exports zijn nog niet gekoppeld. De ingebouwde importpreview accepteert daarom uitsluitend herkenbaar fictieve testnamen. Rechtstreekse `.xlsx`-import is nog niet aanwezig; sla een Excel-werkblad eerst op als CSV. Zet geen echte leerlinggegevens in deze prototypeversie.
 
+## Veilige synchronisatiefundering
+
+De code bevat nu een opt-in `secure-sync`-modus, een duurzame idempotente observatiewachtrij en een private synchronisatie-API met Google-ID-tokencontrole, server-side e-mailallowlist, strikte payloadvalidatie en SQLite-opslag. Zonder alle `VITE_*`-waarden blijft de publieke build bewust in `public-prototype`: er wordt dan geen login of netwerkverzoek gestart en echte leerlingdata blijft geblokkeerd.
+
+Kopieer `.env.example` alleen naar een niet-gecommit `.env` en vul de echte waarden lokaal/in het deployment-secretbeheer in. Start de backend met `npm run server`. Publiceer de backend uitsluitend achter HTTPS en een same-origin reverse proxy naar `/api`; cross-origin wildcards zijn niet toegestaan. De productie-gate is pas open nadat Google OAuth, de exacte docentallowlist, private persistente opslag, backup/restore en een live synchronisatietest zijn geconfigureerd.
+
 ## Kwaliteitschecks
 
 ```bash
 npm test
 npm run build
 npm run lint
+npm run typecheck:server
+npm run test:server
 node scripts/visual-check.mjs
 ```

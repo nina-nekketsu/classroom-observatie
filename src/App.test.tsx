@@ -1,12 +1,31 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import type { RuntimeConfig } from './runtimeConfig'
 
 beforeEach(() => localStorage.clear())
 afterEach(() => cleanup())
 
 describe('live classroom workflow', () => {
+  it('syncs a newly recorded observation through the configured secure transport', async () => {
+    const user = userEvent.setup()
+    const config: RuntimeConfig = { mode: 'secure-sync', syncEnabled: true, authEnabled: true, syncEndpoint: '/api/sync', googleClientId: 'test.apps.googleusercontent.com' }
+    const fetcher = vi.fn(async (_input: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as { operations: Array<{ id: string }> }
+      return new Response(JSON.stringify({ results: [{ operationId: body.operations[0].id, status: 'accepted' }] }), { status: 200 })
+    })
+
+    render(<App runtimeConfig={config} tokenProvider={async () => 'google-id-token'} fetcher={fetcher} />)
+    await user.click(screen.getByRole('button', { name: 'Aanwezigheid afronden' }))
+    await user.click(screen.getByRole('button', { name: 'Noah B. selecteren' }))
+    await user.click(screen.getByRole('button', { name: 'Goed antwoord' }))
+
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1))
+    expect(fetcher.mock.calls[0][1].headers).toMatchObject({ authorization: 'Bearer google-id-token' })
+    await waitFor(() => expect(screen.getByTestId('pending-sync')).toHaveTextContent('0 wachtend'))
+  })
+
   it('starts with attendance, offers alphabetical navigation, then hides absent students from live observations', async () => {
     const user = userEvent.setup()
     render(<App />)
